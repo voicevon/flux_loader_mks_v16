@@ -39,7 +39,7 @@ class LoaderConfig:
     # ------------------------------------------------------------------
     # 运动约束
     # ------------------------------------------------------------------
-    default_feedrate: float = 18000.0   # 默认笛卡尔进给率 (mm/min) = 300 mm/s，高速且稳定，避免 60000 导致的打滑失步
+    default_feedrate: float = 9000.0    # 默认笛卡尔进给率 (mm/min) = 100 mm/s，调低以便细致观察动作与轨迹细节
     joint_jog_feedrate: float = 12000.0 # 关节点动默认进给率 (deg/min) = 200 deg/s
     joint_theta_jog_feedrate: float = 12000.0 # 大臂点动进给率 (deg/min) = 200 deg/s
     joint_psi_jog_feedrate: float = 30000.0   # 小臂点动进给率 (deg/min) = 500 deg/s
