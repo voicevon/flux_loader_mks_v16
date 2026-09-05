@@ -21,6 +21,7 @@ import logging
 import os
 import re
 import sys
+import time
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 
@@ -83,16 +84,16 @@ class PresetManager:
     存储格式（~/.flux_loader/presets.json）::
 
         {
-            "机械零位 (Home Pose)": {"x": 0.0, "y": 600.0, "z": 80.0, "r": 0.0},
+            "机械零位 (Home Pose)": {"x": 0.0, "y": 600.0, "z": 80.0, "r": 90.0},
             ...
         }
     """
 
     _DEFAULT_PRESETS: Dict[str, Pose] = {
-        "机械零位 (Home Pose)":         Pose(x=0.0,    y=600.0, z=80.0, r=0.0),
-        "安全待机位 (Standby)":          Pose(x=0.0,    y=300.0, z=80.0, r=0.0),
-        "标准抓取位 (Pick Pose)":        Pose(x=250.0,  y=250.0, z=20.0, r=60.0),
-        "落料入料口 (Dealer Drop Pose)": Pose(x=-250.0, y=350.0, z=80.0, r=30.0),
+        "机械零位 (Home Pose)":         Pose(x=0.0,    y=600.0, z=80.0, r=90.0),
+        "安全待机位 (Standby)":          Pose(x=0.0,    y=300.0, z=80.0, r=90.0),
+        "标准抓取位 (Pick Pose)":        Pose(x=250.0,  y=250.0, z=20.0, r=90.0),
+        "落料入料口 (Dealer Drop Pose)": Pose(x=-250.0, y=350.0, z=80.0, r=90.0),
     }
 
     def __init__(self, filepath: str = "~/.flux_loader/presets.json") -> None:
@@ -258,8 +259,10 @@ class LoaderCLIApp:
                     break
                 else:
                     print("\n[提示] 无效选项，请重新输入。")
-            except KeyboardInterrupt:
-                print("\n[中断] 操作已取消。")
+            except (KeyboardInterrupt, EOFError):
+                print("\n[退出] 收到退出信号，正在安全退出...")
+                self._robot.disconnect()
+                break
             except Exception as exc:
                 logger.exception("执行出错: %s", exc)
 
@@ -468,20 +471,46 @@ class LoaderCLIApp:
                 print(f"    [{idx}] {name:<28} -> X:{pose.x:6.1f}  Y:{pose.y:6.1f}  Z:{pose.z:5.1f}  R:{pose.r:5.1f}")
 
             print("\n  【 自动化作业流程测试 】")
-            print("    [a] 执行【芦笋单次搬运节拍宏】 (抓取 -> 提升 -> 移载 -> 释放全闭环)\n")
+            print("    [a] 执行【芦笋搬运节拍宏】 (输入几个 a 即执行几个循环，如 a=1次、aaaa=4次、a6=6次)\n")
             print("  【 工位点位管理 】")
             print("    [s] 将当前实际位置添加为新预设点\n")
             print("    [b] 返回主菜单")
             print("-" * 66)
 
-            choice = input("\n>> 请选择跳转工位或作业 [编号/a/s/b]: ").strip().lower()
+            try:
+                choice = input("\n>> 请选择跳转工位或作业 [编号/a/s/b]: ").strip().lower()
+            except (KeyboardInterrupt, EOFError):
+                break
             if choice == "b":
                 break
-            elif choice in ("a", "8"):
-                # 一键执行搬运宏
-                print("\n[工作流] 正在启动芦笋单次闭环搬运测试...")
-                self._workflow.run()
-                print("[完成] 搬运节拍测试已结束。")
+            elif choice.startswith("a") or choice == "8":
+                # 解析循环次数：输入几个 a 即循环几次（如 aaaaaa -> 6次），亦支持 a6 / a 6
+                cycles = 1
+                if all(c == "a" for c in choice):
+                    cycles = len(choice)
+                else:
+                    m = re.match(r"^a\s*(\d+)$", choice)
+                    if m:
+                        cycles = int(m.group(1))
+                    elif choice == "8":
+                        cycles = 1
+                    else:
+                        print("\n[提示] 无效选项，多轮循环请输入连续的 a (如 'aaaa') 或 'a4'。")
+                        continue
+
+                print(f"\n[工作流] 正在启动芦笋搬运闭环测试 (连续执行 {cycles} 个循环)...")
+                executed = 0
+                for i in range(1, cycles + 1):
+                    if cycles > 1:
+                        print(f"\n{'=' * 20} 正在执行第 {i}/{cycles} 轮搬运循环 {'=' * 20}")
+                    success = self._workflow.run()
+                    executed = i
+                    if not success:
+                        print(f"\n[警告] 第 {i} 轮循环被中断或执行失败！")
+                        break
+                    if i < cycles:
+                        time.sleep(0.5)
+                print(f"\n[完成] 搬运节拍测试已结束 (共执行完成 {executed}/{cycles} 轮)。")
             elif choice.isdigit() and 1 <= int(choice) <= len(keys):
                 name = keys[int(choice) - 1]
                 target = presets[name]

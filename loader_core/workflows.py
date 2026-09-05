@@ -20,9 +20,9 @@ from .robot import ScaraRobot
 logger = logging.getLogger(__name__)
 
 # 默认工作点位（保持与原 loader_cli.py 一致，可通过构造参数覆盖）
-_DEFAULT_PICK_POSE = Pose(x=250.0, y=250.0, z=20.0, r=60.0)
+_DEFAULT_PICK_POSE = Pose(x=250.0, y=250.0, z=20.0, r=90.0)
 _DEFAULT_SAFE_Z = 80.0
-_DEFAULT_DROP_POSE = Pose(x=-250.0, y=350.0, z=80.0, r=30.0)
+_DEFAULT_DROP_POSE = Pose(x=-250.0, y=350.0, z=80.0, r=90.0)
 
 
 @dataclass
@@ -43,6 +43,7 @@ class PickAndPlaceConfig:
     grip_delay_s: float = 0.6
     release_delay_s: float = 0.5
     lift_delay_s: float = 0.4
+    feedrate: Optional[float] = None    # 移动进给率 (mm/min)，None 则自动使用 LoaderConfig.default_feedrate
 
 
 class PickAndPlaceWorkflow:
@@ -66,21 +67,31 @@ class PickAndPlaceWorkflow:
         self._cfg = config or PickAndPlaceConfig()
 
     def run(self) -> bool:
-        """执行完整的单次抓取-搬运-释放循环。
+        """执行单次完整搬运闭环。
+
+        时序流程：
+          1. 提升 Z 至安全高度 (safe_z_mm) 并打开夹爪
+          2. 移动至抓取工位上方 (pick_pose.x, pick_pose.y, safe_z_mm, pick_pose.r)
+          3. 下探至物料抓取高度 (pick_pose.z)
+          4. 闭合双夹爪，等待稳定 (grip_delay_s)
+          5. 提起至安全高度 (safe_z_mm)，等待稳定 (lift_delay_s)
+          6. 移动至释放工位 (drop_pose.x, drop_pose.y, safe_z_mm, drop_pose.r)
+          7. 打开双夹爪释放芦笋，等待稳定 (release_delay_s)
 
         Returns:
-            True 表示完整执行成功，False 表示被中断或失败。
+            True 表示搬运完成
         """
-        cfg = self._cfg
         robot = self._robot
+        cfg = self._cfg
+        feedrate = cfg.feedrate if cfg.feedrate is not None else robot._cfg.default_feedrate
+        start_t = time.monotonic()
 
         logger.info("=" * 50)
         logger.info("开始执行【芦笋单次搬运节拍宏测试】")
         logger.info("=" * 50)
-        t_start = time.monotonic()
 
         try:
-            # 步骤 1: 提升至安全高度并打开双夹爪
+            # 步骤 1: 确保安全高度与夹爪初始状态
             logger.info("[步骤 1/7] 提升 Z 至安全高度 %.1f mm，打开夹爪...", cfg.safe_z_mm)
             robot.set_z_height(cfg.safe_z_mm)
             robot.gripper.set_both_grippers(open_state=True)
@@ -92,9 +103,9 @@ class PickAndPlaceWorkflow:
                 y=cfg.pick_pose.y,
                 z=cfg.safe_z_mm,
                 r=cfg.pick_pose.r,
-                f=3500.0,
+                f=feedrate,
             )
-            logger.info("[步骤 2/7] 移动至抓取工位上方: X=%.1f Y=%.1f", pick_xy.x, pick_xy.y)
+            logger.info("[步骤 2/7] 移动至抓取工位上方: X=%.1f Y=%.1f (进给率 F=%.0f)", pick_xy.x, pick_xy.y, feedrate)
             robot.move_to_pose(pick_xy)
 
             # 步骤 3: 下探至抓取高度
@@ -118,9 +129,9 @@ class PickAndPlaceWorkflow:
                 y=cfg.drop_pose.y,
                 z=cfg.safe_z_mm,
                 r=cfg.drop_pose.r,
-                f=3500.0,
+                f=feedrate,
             )
-            logger.info("[步骤 6/7] 搬运至分发入口: X=%.1f Y=%.1f R=%.1f", drop_xy.x, drop_xy.y, drop_xy.r)
+            logger.info("[步骤 6/7] 搬运至分发入口: X=%.1f Y=%.1f R=%.1f (进给率 F=%.0f)", drop_xy.x, drop_xy.y, drop_xy.r, feedrate)
             robot.move_to_pose(drop_xy)
             time.sleep(0.3)
 
@@ -129,7 +140,7 @@ class PickAndPlaceWorkflow:
             robot.gripper.set_both_grippers(open_state=True)
             time.sleep(cfg.release_delay_s)
 
-            elapsed = time.monotonic() - t_start
+            elapsed = time.monotonic() - start_t
             logger.info("=" * 50)
             logger.info("单次搬运循环完成！总耗时: %.2f 秒", elapsed)
             logger.info("=" * 50)

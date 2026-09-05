@@ -118,6 +118,14 @@ class ScaraRobot:
         self._h.send_and_wait("M302 P1", timeout=_QUERY_TIMEOUT)
         logger.info("设置 R 轴最大进给率上限 M203 E%.0f (释放固件限制)", cfg.max_r_feedrate)
         self._h.send_and_wait(f"M203 E{cfg.max_r_feedrate:.0f}", timeout=_QUERY_TIMEOUT)
+        logger.info(
+            "设置运动加速度上限 M201 X%.0f Y%.0f, 加速度 M204 P%.0f T%.0f",
+            cfg.max_accel_x, cfg.max_accel_y, cfg.default_accel, cfg.travel_accel,
+        )
+        self._h.send_and_wait(f"M201 X{cfg.max_accel_x:.0f} Y{cfg.max_accel_y:.0f}", timeout=_QUERY_TIMEOUT)
+        self._h.send_and_wait(f"M204 P{cfg.default_accel:.0f} T{cfg.travel_accel:.0f}", timeout=_QUERY_TIMEOUT)
+        logger.info("设置急动度 M205 X%.1f Y%.1f", cfg.jerk_xy, cfg.jerk_xy)
+        self._h.send_and_wait(f"M205 X{cfg.jerk_xy:.1f} Y{cfg.jerk_xy:.1f}", timeout=_QUERY_TIMEOUT)
         self._sync_state()
         logger.info("初始化完成: %s | %s", self.current_pose, self.current_angles)
 
