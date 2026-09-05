@@ -43,6 +43,8 @@ class LoaderConfig:
     joint_jog_feedrate: float = 6000.0  # 关节点动默认进给率 (deg/min)
     joint_theta_jog_feedrate: float = 6000.0  # 大臂点动进给率 (deg/min) = 100 deg/s (基准速度50°/s的2倍)
     joint_psi_jog_feedrate: float = 15000.0   # 小臂点动进给率 (deg/min) = 250 deg/s (基准速度50°/s的5倍)
+    joint_r_jog_feedrate: float = 60000.0     # R 轴旋转点动进给率 (deg/min) = 1000 deg/s (在当前200°/s基础上再提速5倍)
+    max_r_feedrate: float = 1200.0            # R 轴/E0 固件底层最大进给率上限 (deg/s，通过 M203 E 释放至1200)
     z_min_mm: float = 0.0               # Z 轴最低安全高度 (mm)
     z_max_mm: float = 100.0             # Z 轴最高行程 (mm)
     z_servo_angle_at_min: float = 270.0 # Z = z_min_mm (最低工作位) 对应的舵机物理角度 (°)
@@ -59,8 +61,8 @@ class LoaderConfig:
     z_servo_id: int = 0          # Z 轴升降舵机 (Servo 0, A11/D65)
     gripper1_id: int = 1         # 夹爪 1 — 芦笋头端 (Servo 1, D11)
     gripper2_id: int = 2         # 夹爪 2 — 芦笋尾端 (Servo 2, D12)
-    gripper_open_angle: int = 0  # 夹爪打开角度 (°)
-    gripper_close_angle: int = 90  # 夹爪闭合角度 (°)
+    gripper_open_angle: int = 30   # 夹爪打开角度 (°) - 实测整定 S30 打开
+    gripper_close_angle: int = 0   # 夹爪闭合角度 (°) - 实测整定 S0 闭合/抓紧
 
     # ------------------------------------------------------------------
     # 串口通信参数

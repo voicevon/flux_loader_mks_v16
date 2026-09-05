@@ -89,10 +89,10 @@ class PresetManager:
     """
 
     _DEFAULT_PRESETS: Dict[str, Pose] = {
-        "机械零位 (Home Pose)":         Pose(x=0.0,   y=600.0, z=80.0, r=0.0),
-        "安全待机位 (Standby)":          Pose(x=0.0,   y=300.0, z=80.0, r=0.0),
-        "标准抓取位 (Pick Pose)":        Pose(x=150.0, y=350.0, z=20.0, r=0.0),
-        "落料入料口 (Dealer Drop Pose)": Pose(x=-150.0, y=350.0, z=80.0, r=30.0),
+        "机械零位 (Home Pose)":         Pose(x=0.0,    y=600.0, z=80.0, r=0.0),
+        "安全待机位 (Standby)":          Pose(x=0.0,    y=300.0, z=80.0, r=0.0),
+        "标准抓取位 (Pick Pose)":        Pose(x=250.0,  y=250.0, z=20.0, r=60.0),
+        "落料入料口 (Dealer Drop Pose)": Pose(x=-250.0, y=350.0, z=80.0, r=30.0),
     }
 
     def __init__(self, filepath: str = "~/.flux_loader/presets.json") -> None:
@@ -183,21 +183,35 @@ class LoaderCLIApp:
     def _select_port_menu(self) -> None:
         ports = SerialTransceiver.list_ports()
         if not ports:
-            print("[提示] 当前系统未检测到可用串口设备！")
-            port = input("请输入串口名 (如 COM3) 或直接按回车退出: ").strip()
+            print("\n[提示] 当前系统未自动检测到可用串口设备！")
+            port = input("请输入串口名 (如 COM11) 或直接按回车跳过: ").strip()
             if port:
                 self._robot.connect(port)
+            return
+
+        # 优先寻找常用端口（如 COM11，MKS 控制板）
+        default_idx = 1
+        for idx, p in enumerate(ports, 1):
+            if "COM11" in p.upper() or "11" in p:
+                default_idx = idx
+                break
+
+        print("\n" + "=" * 50)
+        print("          选择机械臂串口设备")
+        print("=" * 50)
+        for idx, p in enumerate(ports, 1):
+            tag = "  <-- 推荐 (MKS 控制板)" if idx == default_idx else ""
+            print(f"  [{idx}] {p}{tag}")
+        print("=" * 50)
+
+        prompt = f">> 请输入编号或直接按回车 [默认: {default_idx} - {ports[default_idx-1]}]: "
+        choice = input(prompt).strip()
+        if not choice:
+            self._robot.connect(ports[default_idx - 1])
+        elif choice.isdigit() and 1 <= int(choice) <= len(ports):
+            self._robot.connect(ports[int(choice) - 1])
         else:
-            print("\n检测到以下串口设备：")
-            for idx, p in enumerate(ports, 1):
-                print(f"  [{idx}] {p}")
-            choice = input(f"请选择串口编号 (1~{len(ports)}) 或直接输入端口名: ").strip()
-            if choice.isdigit() and 1 <= int(choice) <= len(ports):
-                self._robot.connect(ports[int(choice) - 1])
-            elif choice:
-                self._robot.connect(choice)
-            else:
-                self._robot.connect(ports[0])
+            self._robot.connect(choice)
 
     # ------------------------------------------------------------------
     # 主菜单循环
@@ -216,16 +230,14 @@ class LoaderCLIApp:
                     self._robot.home()
                 elif choice == "3":
                     self._set_home_menu()
-                elif choice == "4":
-                    self._jog_menu()
+                elif choice in ("4", "7"):
+                    # 第4项与第7项合并：手动点动与末端工具
+                    self._jog_and_effector_menu()
                 elif choice == "5":
                     self._goto_menu()
-                elif choice == "6":
-                    self._preset_positions_menu()
-                elif choice == "7":
-                    self._end_effector_menu()
-                elif choice == "8":
-                    self._workflow.run()
+                elif choice in ("6", "8"):
+                    # 第6项与第8项合并：工位跳转与自动搬运
+                    self._preset_and_workflow_menu()
                 elif choice == "9":
                     self._raw_gcode_terminal()
                 elif choice in ("p", "pos"):
@@ -263,7 +275,7 @@ class LoaderCLIApp:
             pos_str = ang_str = "未连接"
 
         print("\n" + "=" * 66)
-        print("           Flux Loader (SCARA) 交互控制终端 v2.0")
+        print("           Flux Loader (SCARA) 交互控制终端 v2.1")
         print("=" * 66)
         print(f"  [ 串口 ]:  {conn_str}")
         print(f"  [ 坐标 ]:  {pos_str}")
@@ -276,14 +288,10 @@ class LoaderCLIApp:
         print("    [3] 将当前位置设为零点 (G92 重设当前为原点)\n")
         print("    [p] 刷新当前坐标与状态 (M114)")
 
-        print("\n  【 运动与点位跳转 】")
-        print("    [4] 笛卡尔点动微调     (Jog Mode: 步进微调 X/Y/Z/R)\n")
+        print("\n  【 手动调试与点位控制 】")
+        print("    [4] 手动点动与末端工具 (Jog 步进微调 X/Y/Z/R、Z轴舵机升降与夹爪开闭)\n")
         print("    [5] 直达目标绝对坐标   (输入 X Y Z R F 执行平滑运动)\n")
-        print("    [6] 预设特征点位跳转   (原点/待机位/抓取位/落料口)")
-
-        print("\n  【 末端工具与流程测试 】")
-        print("    [7] 末端工具与舵机控制 (Z 轴升降高度、夹爪1/2独立及协同)\n")
-        print("    [8] 芦笋单次搬运宏测试 (抓取 -> 提升 -> 移载 -> 释放全闭环)")
+        print("    [6] 工位跳转与自动搬运 (预设工位快速跳转、芦笋单次完整搬运宏)")
 
         print("\n  【 系统维护与通信 】")
         print("    [9] 原生 G-code 命令行 (透传发送底层指令)\n")
@@ -328,35 +336,84 @@ class LoaderCLIApp:
             self._robot.set_coordinate_origin(x, y, z, r)
 
     # ------------------------------------------------------------------
-    # 子菜单：点动微调
+    # 子菜单：手动点动与末端工具 (第4项与第7项深度合并)
     # ------------------------------------------------------------------
-    def _jog_menu(self) -> None:
+    def _jog_and_effector_menu(self) -> None:
         while True:
             p = self._robot.current_pose
             a = self._robot.current_angles
-            print("\n" + "-" * 62)
-            print("          机械臂点动微调模式 (Jog Mode)")
-            print("-" * 62)
-            print(f"  笛卡尔坐标: X:{p.x:.1f}  Y:{p.y:.1f}  Z:{p.z:.1f}  R:{p.r:.1f}")
-            print(f"  当前关节角: 大臂(Theta):{a.theta:.1f}°  小臂(Psi):{a.psi:.1f}°")
-            print(f"  当前步长:   {self._jog.step_info}\n")
-            print("  【笛卡尔末端点动】")
-            print("    [w / s] :  Y 轴 +/- (前进/后退)    [a / d] :  X 轴 -/+ (左移/右移)")
-            print("    [u / j] :  Z 轴 +/- (升降高度)    [q / e] :  R 轴 +/- (末端E轴旋转)\n")
-            print("  【关节独立角点动 (用于排查与确认电机物理转向)】")
-            print("    [o / l] :  大臂 Theta +/- (期望: +为逆时针CCW, -为顺时针CW)")
-            print("    [i / k] :  小臂 Psi   +/- (期望: +为逆时针折叠, -为顺时针折叠)\n")
-            print("  【步长切换】")
-            print("    [1] 步长 1 mm / 1°    [2] 步长 10 mm / 5°    [3] 步长 50 mm / 15°\n")
+            print("\n" + "-" * 66)
+            print("          手动点动与末端工具控制 (Jog & End-Effector)")
+            print("-" * 66)
+            print(f"  当前坐标: X:{p.x:6.1f}  Y:{p.y:6.1f}  Z:{p.z:5.1f} mm  R:{p.r:5.1f}°")
+            print(f"  当前关节: 大臂(θ):{a.theta:5.1f}°  小臂(ψ):{a.psi:5.1f}°")
+            print(f"  当前步长: {self._jog.step_info}\n")
+            print("  【 笛卡尔空间点动 】          【 关节角独立点动 】         【 步长档位 】")
+            print("    W / S : Y 轴 +/- (前进/后退)  O / L : 大臂 θ +/- (逆/顺)   [1] 1mm / 1°")
+            print("    A / D : X 轴 -/+ (左移/右移)  I / K : 小臂 ψ +/- (展/折)   [2] 10mm / 5°")
+            print("    U / J : Z 轴 +/- (舵机升降)   Q / E : R  轴 +/- (转角)     [3] 50mm / 15°\n")
+            print("  【 Z 轴舵机升降控制 】         【 抓取夹爪舵机控制 】")
+            print("    [zh] 升至最高安全位 (100mm)   [c] 双夹爪同时闭合 (抓取)")
+            print("    [zl] 降至下探工作位 ( 20mm)   [o] 双夹爪同时打开 (松开)")
+            print("    [z]  输入指定高度 (0~100mm)   [c1] / [o1] 夹爪1(头端) 闭/开")
+            print("                                  [c2] / [o2] 夹爪2(尾端) 闭/开\n")
             print("    [b] 返回主菜单")
-            print("-" * 62)
+            print("-" * 66)
 
-            cmd = input("\n>> 请输入点动键: ").strip().lower()
+            cmd = input("\n>> 请输入控制指令: ").strip().lower()
             if cmd == "b":
                 break
-            handled = self._jog.handle_key(cmd)
-            if not handled:
-                print("[提示] 未识别的按键，请重新输入。")
+
+            # 1. 舵机快捷指令
+            if cmd in ("c", "close", "9"):
+                print(f"\n[执行] 正在发送双夹爪闭合指令 (M280 P1 S{self._config.gripper_close_angle}, M280 P2 S{self._config.gripper_close_angle})...")
+                self._robot.gripper.set_both_grippers(open_state=False)
+                print("[完成] 双夹爪已闭合。")
+            elif cmd in ("o", "open", "8"):
+                print(f"\n[执行] 正在发送双夹爪打开指令 (M280 P1 S{self._config.gripper_open_angle}, M280 P2 S{self._config.gripper_open_angle})...")
+                self._robot.gripper.set_both_grippers(open_state=True)
+                print("[完成] 双夹爪已打开。")
+            elif cmd in ("c1", "5"):
+                print(f"\n[执行] 夹爪 1 (头端) 闭合 (M280 P1 S{self._config.gripper_close_angle})...")
+                self._robot.gripper.set_gripper(self._config.gripper1_id, open_state=False)
+            elif cmd in ("o1", "4"):
+                print(f"\n[执行] 夹爪 1 (头端) 打开 (M280 P1 S{self._config.gripper_open_angle})...")
+                self._robot.gripper.set_gripper(self._config.gripper1_id, open_state=True)
+            elif cmd in ("c2", "7"):
+                print(f"\n[执行] 夹爪 2 (尾端) 闭合 (M280 P2 S{self._config.gripper_close_angle})...")
+                self._robot.gripper.set_gripper(self._config.gripper2_id, open_state=False)
+            elif cmd in ("o2", "6"):
+                print(f"\n[执行] 夹爪 2 (尾端) 打开 (M280 P2 S{self._config.gripper_open_angle})...")
+                self._robot.gripper.set_gripper(self._config.gripper2_id, open_state=True)
+            elif cmd in ("zh", "2"):
+                print("\n[执行] Z 轴一键升至最高安全位 (100.0 mm)...")
+                self._robot.set_z_height(100.0)
+                print(f"[完成] 当前 Z 轴高度: {self._robot.current_pose.z:.1f} mm")
+            elif cmd in ("zl", "3"):
+                print("\n[执行] Z 轴一键降至下探工作位 (20.0 mm)...")
+                self._robot.set_z_height(20.0)
+                print(f"[完成] 当前 Z 轴高度: {self._robot.current_pose.z:.1f} mm")
+            elif cmd == "z":
+                val = input("请输入目标 Z 轴高度 (0~100 mm): ").strip()
+                if val:
+                    try:
+                        target_z = float(val)
+                        print(f"\n[执行] Z 轴移动至 {target_z:.1f} mm...")
+                        self._robot.set_z_height(target_z)
+                        print(f"[完成] 当前 Z 轴高度: {self._robot.current_pose.z:.1f} mm")
+                    except ValueError:
+                        print("[错误] 请输入有效数字！")
+            elif cmd.startswith("z") and len(cmd) > 1 and cmd[1:].replace(".", "", 1).isdigit():
+                # 支持直接输入 z50, z80
+                target_z = float(cmd[1:])
+                print(f"\n[执行] Z 轴移动至 {target_z:.1f} mm...")
+                self._robot.set_z_height(target_z)
+                print(f"[完成] 当前 Z 轴高度: {self._robot.current_pose.z:.1f} mm")
+            else:
+                # 2. 轴点动指令由 JogController 分发
+                handled = self._jog.handle_key(cmd)
+                if not handled:
+                    print("[提示] 未识别的按键或指令，请重新输入。")
 
     # ------------------------------------------------------------------
     # 子菜单：直达目标坐标
@@ -379,7 +436,7 @@ class LoaderCLIApp:
         if m: y = float(m.group(1))
         m = re.search(r"[Zz]([-+]?\d*\.?\d+)", raw)
         if m: z = float(m.group(1))
-        m = re.search(r"[Rr]([-+]?\d*\.?\d+)", raw)
+        m = re.search(r"[RrEe]([-+]?\d*\.?\d+)", raw)
         if m: r = float(m.group(1))
         m = re.search(r"[Ff](\d+)", raw)
         if m: f = float(m.group(1))
@@ -394,37 +451,47 @@ class LoaderCLIApp:
         self._robot.move_to_pose(target)
 
     # ------------------------------------------------------------------
-    # 子菜单：预设特征点位
+    # 子菜单：工位跳转与自动搬运 (第6项与第8项深度合并)
     # ------------------------------------------------------------------
-    def _preset_positions_menu(self) -> None:
+    def _preset_and_workflow_menu(self) -> None:
         while True:
             p = self._robot.current_pose
             presets = self._presets.list_presets()
             keys = list(presets.keys())
 
             print("\n" + "-" * 66)
-            print("              预设特征点位快速跳转")
+            print("          工位跳转与自动搬运 (Workstations & Workflow)")
             print("-" * 66)
-            print(f"  当前位置: X:{p.x:.1f}  Y:{p.y:.1f}  Z:{p.z:.1f}  R:{p.r:.1f}\n")
+            print(f"  当前位置: X:{p.x:6.1f}  Y:{p.y:6.1f}  Z:{p.z:5.1f} mm  R:{p.r:5.1f}°\n")
+            print("  【 预设特征工位快速跳转 】")
             for idx, (name, pose) in enumerate(presets.items(), 1):
-                print(f"    [{idx}] {name:<28} -> X:{pose.x:6.1f}  Y:{pose.y:6.1f}  Z:{pose.z:5.1f}  R:{pose.r:5.1f}\n")
+                print(f"    [{idx}] {name:<28} -> X:{pose.x:6.1f}  Y:{pose.y:6.1f}  Z:{pose.z:5.1f}  R:{pose.r:5.1f}")
+
+            print("\n  【 自动化作业流程测试 】")
+            print("    [a] 执行【芦笋单次搬运节拍宏】 (抓取 -> 提升 -> 移载 -> 释放全闭环)\n")
+            print("  【 工位点位管理 】")
             print("    [s] 将当前实际位置添加为新预设点\n")
             print("    [b] 返回主菜单")
             print("-" * 66)
 
-            choice = input("\n>> 请选择跳转点位 [编号/s/b]: ").strip().lower()
+            choice = input("\n>> 请选择跳转工位或作业 [编号/a/s/b]: ").strip().lower()
             if choice == "b":
                 break
+            elif choice in ("a", "8"):
+                # 一键执行搬运宏
+                print("\n[工作流] 正在启动芦笋单次闭环搬运测试...")
+                self._workflow.run()
+                print("[完成] 搬运节拍测试已结束。")
             elif choice.isdigit() and 1 <= int(choice) <= len(keys):
                 name = keys[int(choice) - 1]
                 target = presets[name]
-                print(f"\n[跳转] 正在移动至: {name}")
+                print(f"\n[跳转] 正在移动至: {name} (X={target.x:.1f}, Y={target.y:.1f}, Z={target.z:.1f}, R={target.r:.1f})")
                 # 先升至安全高度再平移，保护末端机构
                 safe_z = self._config.home_pose.z
                 self._robot.set_z_height(safe_z)
                 self._robot.move_to_pose(Pose(x=target.x, y=target.y, z=safe_z, r=target.r))
                 self._robot.set_z_height(target.z)
-                print(f"[完成] 已到达 {name}")
+                print(f"[完成] 已精准到达: {name}")
             elif choice == "s":
                 name = input("\n请输入点位描述名称: ").strip()
                 if not name or name.lower() == "b":
@@ -434,49 +501,6 @@ class LoaderCLIApp:
                 print(f"[保存] 已将当前位置 {p} 保存为 [{name}]")
             else:
                 print("\n[提示] 无效选项，请重新输入。")
-
-    # ------------------------------------------------------------------
-    # 子菜单：末端工具
-    # ------------------------------------------------------------------
-    def _end_effector_menu(self) -> None:
-        while True:
-            print("\n" + "-" * 56)
-            print("          末端执行器与舵机控制")
-            print("-" * 56)
-            print("  【 Z 轴升降舵机 】")
-            print("    [1] 设置指定高度       (输入 0 ~ 100 mm)\n")
-            print("    [2] 一键升至最高安全位 (Z = 100 mm)\n")
-            print("    [3] 一键降至下探工作位 (Z = 15 mm)")
-            print("\n  【 抓取夹爪舵机 】")
-            print("    [4] 夹爪 1 (头端) 打开   [5] 夹爪 1 (头端) 闭合\n")
-            print("    [6] 夹爪 2 (尾端) 打开   [7] 夹爪 2 (尾端) 闭合\n")
-            print("    [8] 双夹爪同时打开        [9] 双夹爪同时闭合\n")
-            print("    [b] 返回主菜单")
-            print("-" * 56)
-
-            c = input("\n>> 请选择控制操作: ").strip().lower()
-            if c == "b":
-                break
-            elif c == "1":
-                val = input("请输入 Z 轴高度 (0~100 mm): ").strip()
-                if val:
-                    self._robot.set_z_height(float(val))
-            elif c == "2":
-                self._robot.set_z_height(100.0)
-            elif c == "3":
-                self._robot.set_z_height(15.0)
-            elif c == "4":
-                self._robot.gripper.set_gripper(self._config.gripper1_id, open_state=True)
-            elif c == "5":
-                self._robot.gripper.set_gripper(self._config.gripper1_id, open_state=False)
-            elif c == "6":
-                self._robot.gripper.set_gripper(self._config.gripper2_id, open_state=True)
-            elif c == "7":
-                self._robot.gripper.set_gripper(self._config.gripper2_id, open_state=False)
-            elif c == "8":
-                self._robot.gripper.set_both_grippers(open_state=True)
-            elif c == "9":
-                self._robot.gripper.set_both_grippers(open_state=False)
 
     # ------------------------------------------------------------------
     # 子菜单：G-code 透传终端

@@ -116,6 +116,8 @@ class ScaraRobot:
         )
         logger.info("允许冷挤出 M302 P1")
         self._h.send_and_wait("M302 P1", timeout=_QUERY_TIMEOUT)
+        logger.info("设置 R 轴最大进给率上限 M203 E%.0f (释放固件限制)", cfg.max_r_feedrate)
+        self._h.send_and_wait(f"M203 E{cfg.max_r_feedrate:.0f}", timeout=_QUERY_TIMEOUT)
         self._sync_state()
         logger.info("初始化完成: %s | %s", self.current_pose, self.current_angles)
 
@@ -218,6 +220,31 @@ class ScaraRobot:
         self._sync_state()
         return True
 
+    def move_r_direct(self, r_deg: float, feedrate: Optional[float] = None) -> bool:
+        """末端旋转轴 (R / E0 轴) 直接驱动 (G6)：绕过笛卡尔逆解与奇异点。
+
+        Args:
+            r_deg:    目标绝对旋转角 (°)
+            feedrate: 进给率 (deg/min)，None 则使用配置默认值 (joint_r_jog_feedrate)
+
+        Returns:
+            True 表示指令发送成功
+        """
+        f = feedrate if feedrate is not None else self._cfg.joint_r_jog_feedrate
+        cmd = f"G6 E{r_deg:.2f} F{f:.0f}"
+        logger.info("R 轴直接驱动 (G6): %s", cmd)
+        self._h.send_and_wait(cmd, timeout=_MOVE_TIMEOUT)
+        # 立即更新上位机内存位姿中的 r，确保连续快速点动不丢失当前目标
+        self.current_pose = Pose(
+            x=self.current_pose.x,
+            y=self.current_pose.y,
+            z=self.current_pose.z,
+            r=r_deg,
+            f=self.current_pose.f,
+        )
+        self._sync_state()
+        return True
+
     def move_to_angles(self, angles: JointAngles, feedrate: Optional[float] = None) -> bool:
         """关节空间移动：正运动学解算后发送 G1。
 
@@ -253,7 +280,10 @@ class ScaraRobot:
             self._sync_state()
             return
         elif axis == "r":
-            new_pose = Pose(x=p.x, y=p.y, z=p.z, r=p.r + delta)
+            # R 轴为末端独立旋转步进电机 (E0)，通过 G6 直接驱动，
+            # 避开 SCARA 逆运动学和机械臂完全伸直位 (Y=600) 处的奇异点拦截
+            self.move_r_direct(p.r + delta)
+            return
         else:
             raise ValueError(f"不支持的轴名称: '{axis}'，有效值: x/y/z/r")
         self.move_to_pose(new_pose)

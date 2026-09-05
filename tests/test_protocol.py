@@ -168,13 +168,21 @@ class TestMarlinProtocolParser(unittest.TestCase):
         self.assertTrue(status.any_triggered())
         self.assertEqual(len(status.raw), 3)
 
-    def test_parse_m119_g_code_format(self):
+    def test_parse_m114_g_code_format(self):
         """验证 G-code 指令使用 E 而非 R（防止回归）。"""
         # move_to_pose 生成的 G-code 应包含 E 字段
         # 此处通过检查 parse_m114 能正确解析 E 字段来间接验证
         lines = ["X:150.00 Y:350.00 Z:80.00 E:45.00", "ok"]
         pose, _ = MarlinProtocolParser.parse_m114(lines)
         self.assertAlmostEqual(pose.r, 45.0)
+
+    def test_parse_m114_fallback_r(self):
+        """验证在 M114 回显无 E 字段时保留 fallback_pose 的 R 轴状态。"""
+        fb = Pose(x=0.0, y=600.0, z=80.0, r=25.0)
+        lines = ["X:0.00 Y:600.00 Z:80.00", "ok"]
+        pose, _ = MarlinProtocolParser.parse_m114(lines, fallback_pose=fb)
+        self.assertIsNotNone(pose)
+        self.assertAlmostEqual(pose.r, 25.0)
 
 
 if __name__ == "__main__":

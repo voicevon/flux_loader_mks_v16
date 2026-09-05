@@ -327,7 +327,8 @@ class MarlinProtocolParser:
 
         pose: Optional[Pose] = None
         if x is not None and y is not None and z is not None:
-            pose = Pose(x=x, y=y, z=z, r=r if r is not None else 0.0)
+            default_r = fallback_pose.r if fallback_pose is not None else 0.0
+            pose = Pose(x=x, y=y, z=z, r=r if r is not None else default_r)
         else:
             pose = fallback_pose
 

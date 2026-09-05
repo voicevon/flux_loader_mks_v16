@@ -20,9 +20,9 @@ from .robot import ScaraRobot
 logger = logging.getLogger(__name__)
 
 # 默认工作点位（保持与原 loader_cli.py 一致，可通过构造参数覆盖）
-_DEFAULT_PICK_POSE = Pose(x=150.0, y=350.0, z=15.0, r=0.0)
+_DEFAULT_PICK_POSE = Pose(x=250.0, y=250.0, z=20.0, r=60.0)
 _DEFAULT_SAFE_Z = 80.0
-_DEFAULT_DROP_POSE = Pose(x=-150.0, y=350.0, z=80.0, r=30.0)
+_DEFAULT_DROP_POSE = Pose(x=-250.0, y=350.0, z=80.0, r=30.0)
 
 
 @dataclass

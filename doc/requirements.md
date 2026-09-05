@@ -15,14 +15,14 @@
 
 ## 2. 机械与运动轴配置
 
-本系统共有 4 个核心运动轴与 1 个末端执行器，物理及电气配置如下表所示：
+本系统共有 4 个核心运动轴与 1 个末端执行器，物理及电气配置如下表所示（经实机调优验证）：
 
 | 轴名称 | 物理机构与作用 | 电动执行器类型 | MKS Base V1.6 物理接口 | 备注 |
 | :--- | :--- | :--- | :--- | :--- |
-| **X 轴** | 大臂关节（Joint 1），控制水平面一阶旋转 | 步进电机 | **X-MOTOR** | 需要回零限位开关 |
-| **Y 轴** | 小臂关节（Joint 2），控制水平面二阶旋转 | 步进电机 | **Y-MOTOR** | 需要回零限位开关 |
-| **Z 轴** | 垂直升降轴，控制末端执行器上下运动 | **舵机 (Servo)** | **Servo 0 (A11 / D65)** | Z 坐标线性映射为舵机角度，见第 3.3 节 |
-| **R 轴** | 末端旋转轴（Joint 3），控制夹爪世界坐标绝对朝向 | 步进电机 | **E0-MOTOR** | 需在大臂小臂旋转时自动进行逆运动学耦合补偿 |
+| **X 轴** | 大臂关节（Joint 1），控制水平面一阶旋转 | 步进电机 | **X-MOTOR** | 需要回零限位开关 (X-MIN) |
+| **Y 轴** | 小臂关节（Joint 2），控制水平面二阶旋转 | 步进电机 | **Y-MOTOR** | 需要回零限位开关 (Y-MIN) |
+| **Z 轴** | 垂直升降轴，控制末端执行器上下运动 | **舵机 (Servo)** | **Servo 0 (A11 / D65)** | Z 坐标线性映射为舵机角度，**原板载 Z-MOTOR 插座空置** |
+| **R 轴** | 末端旋转轴（Joint 3），控制夹爪世界坐标绝对朝向 | 步进电机 | **E0-MOTOR** | **末端旋转步进接板载第4插座 E0-MOTOR**；世界绝对朝向解耦见第 3.2 节与专门规划案 |
 | **夹爪 1 (头端)** | 芦笋头端抓取爪，用于夹取芦笋头部 | 舵机 (Servo) | **Servo 1 (D11)** | 使用 `M280 P1` 进行独立的开/闭动作控制 |
 | **夹爪 2 (尾端)** | 芦笋尾端抓取爪，用于夹取芦笋尾部 | 舵机 (Servo) | **Servo 2 (D12)** | 使用 `M280 P2` 进行独立的开/闭动作控制 |
 
@@ -44,17 +44,18 @@
    * `R`：夹爪在世界坐标系中的绝对角度（单位：度）。
    * `F`：运动进给速度（单位：mm/min）。
 
-### 3.2 逆运动学（IK）与旋转补偿
+### 3.2 逆运动学（IK）与旋转姿态高频解耦方案
 
 1. **大臂与小臂解算**：固件内部通过 SCARA 逆运动学算法将输入的 Cartesian XY 坐标转换为大臂关节角（theta_1）与小臂关节角（theta_2），进而控制 X 轴与 Y 轴步进电机的步数。
 2. **IK 解选择**：固件固定采用 **Elbow UP 解**（小臂向外展开），不支持运行时切换。此方案为芦笋抓取场景提供最大有效工作空间。
-3. **旋转朝向（R 轴）补偿**：为了在 XY 轴运动时，使夹爪在世界坐标系下的绝对朝向 phi 保持恒定或精准按 G-code 指令偏转，固件的 `inverse_kinematics()` 函数需实现如下数学解耦公式：
-
-   ```
-   theta_3(电机实际旋转角) = phi(Gcode绝对朝向) - theta_1 - theta_2
-   ```
-
-   * 该公式能自动在步进中断中补偿因大臂和小臂旋转而产生的夹爪世界朝向偏差。
+3. **旋转朝向（R 轴）解耦数学模型**：
+   末端在世界坐标系中的朝向角 $R_{\text{world}}$ 与小臂方位角和电机角度满足：
+   $$R_{\text{world}} = (\theta_1 + \theta_2) + \alpha_{\text{motor}}$$
+   电机目标物理转角为：
+   $$\alpha_{\text{motor}} = R_{\text{world}} - (\theta_1 + \theta_2)$$
+4. **两阶段演进策略**：
+   * **当前阶段 (V1.0)**：在上位机实现世界坐标系与电机角的解耦，关节点动利用 `G6 T P E` 多轴联动插补实现空间朝向锁定。
+   * **下一阶段 (V2.0 固件升级规划)**：在 Marlin 固件 `planner.cpp` 的 200Hz 微线段切片（Segment）中直接加入上述姿态解耦补偿，确保在走任意长距离笛卡尔直线时，末端夹爪在整个运动全行程中无晃动、零相位滞后。完整技术方案详见文档：[firmware_segment_decoupling_plan.md](file:///d:/Software/antigravity/flux_loader_mks_v16/doc/firmware_segment_decoupling_plan.md)。
 4. **物理几何参数**：大臂长度（L1）和小臂长度（L2）采用**静态配置**，在固件编译前的配置文件中通过以下宏定义：
 
    ```cpp
@@ -92,10 +93,10 @@ servo_angle = (Z_mm / Z_MM_MAX) * Z_SERVO_ANGLE_MAX
 
 ```cpp
 // Configuration.h
-#define GRIPPER1_OPEN_ANGLE   0   // Servo 1 (头端 - D11) 打开角度（°）
-#define GRIPPER1_CLOSE_ANGLE  90  // Servo 1 (头端 - D11) 闭合角度（°）
-#define GRIPPER2_OPEN_ANGLE   0   // Servo 2 (尾端 - D12) 打开角度（°）
-#define GRIPPER2_CLOSE_ANGLE  90  // Servo 2 (尾端 - D12) 闭合角度（°）
+#define GRIPPER1_OPEN_ANGLE   30  // Servo 1 (头端 - D11) 打开角度（°）- 实测整定
+#define GRIPPER1_CLOSE_ANGLE   0  // Servo 1 (头端 - D11) 闭合角度（°）- 实测整定
+#define GRIPPER2_OPEN_ANGLE   30  // Servo 2 (尾端 - D12) 打开角度（°）- 实测整定
+#define GRIPPER2_CLOSE_ANGLE   0  // Servo 2 (尾端 - D12) 闭合角度（°）- 实测整定
 ```
 
 典型控制指令示例：
@@ -141,13 +142,20 @@ steps_per_degree = (3200 / 360.0) * GEAR_RATIO
 > **说明**：SCARA 为连杆旋转机构，其 X、Y、R 关节轴的底层物理量均为**旋转角度（度，°）**而非笛卡尔线位移。因此固件底层电机速度和加速度的单位均为**角速度 (°/s)** 与 **角加速度 (°/s²)**。实际末端轨迹线速度由 G-code 进给率 `F`（mm/min）经运动学逆解插补动态计算。
 
 ```cpp
-// Configuration.h
+// Configuration.h 固件基准宏
 #define MAX_FEEDRATE_X       200  // 大臂最大角速度 (°/s)
 #define MAX_FEEDRATE_Y       200  // 小臂最大角速度 (°/s)
-#define MAX_FEEDRATE_E       200  // R轴最大角速度 (°/s)
+#define MAX_FEEDRATE_E       200  // R轴最大角速度 (°/s) (上位机初始化时通过 M203 E1200 动态释放至 1200°/s)
 #define DEFAULT_ACCELERATION 500  // 默认角加速度 (°/s^2)
 #define HOMING_FEEDRATE_XY   200  // 回零角速度 (deg/min)
 ```
+
+**实机进给率调优参数（上位机 `LoaderConfig` 默认配置）**：
+* **大臂点动进给率**：`6000.0 deg/min` (100°/s，兼顾大臂惯量与平稳度)
+* **小臂点动进给率**：`15000.0 deg/min` (250°/s，大幅提高小臂响应速度)
+* **R 轴旋转点动进给率**：`60000.0 deg/min` (1000°/s，末端轻载轴毫秒级快速旋转到位)
+* **固件限速动态解除**：上位机连接初始化时自动下发 `M203 E1200`，释放 EEPROM 默认低速限制。
+* **常温直驱使能**：上位机初始化自动下发 `M302 P1` 允许冷挤出，确保无喷嘴加热需求下电机正常受控。
 
 ---
 
@@ -205,10 +213,10 @@ steps_per_degree = (3200 / 360.0) * GEAR_RATIO
 | `JOINT1_GEAR_RATIO` | 大臂关节减速比 | **6.4** (已确定) |
 | `JOINT2_GEAR_RATIO` | 小臂关节减速比 | **4.2** (已确定) |
 | `JOINT3_GEAR_RATIO` | R 轴减速比 | **2.8** (已确定) |
-| `GRIPPER1_OPEN_ANGLE` | 夹爪 1 (头端) 打开角度 (°) | **0** (已确定) |
-| `GRIPPER1_CLOSE_ANGLE` | 夹爪 1 (头端) 闭合角度 (°) | **90** (已确定) |
-| `GRIPPER2_OPEN_ANGLE` | 夹爪 2 (尾端) 打开角度 (°) | **0** (已确定) |
-| `GRIPPER2_CLOSE_ANGLE` | 夹爪 2 (尾端) 闭合角度 (°) | **90** (已确定) |
+| `GRIPPER1_OPEN_ANGLE` | 夹爪 1 (头端) 打开角度 (°) | **30** (实测整定) |
+| `GRIPPER1_CLOSE_ANGLE` | 夹爪 1 (头端) 闭合角度 (°) | **0** (实测整定) |
+| `GRIPPER2_OPEN_ANGLE` | 夹爪 2 (尾端) 打开角度 (°) | **30** (实测整定) |
+| `GRIPPER2_CLOSE_ANGLE` | 夹爪 2 (尾端) 闭合角度 (°) | **0** (实测整定) |
 | `MAX_FEEDRATE_X` | 大臂最大角速度 (°/s) | **200** (保护上限) |
 | `MAX_FEEDRATE_Y` | 小臂最大角速度 (°/s) | **200** (保护上限) |
 | `MAX_FEEDRATE_E` | R 轴最大角速度 (°/s) | **200** (保护上限) |
