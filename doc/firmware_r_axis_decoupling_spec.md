@@ -3,7 +3,7 @@
 
 > **目标受众**：固件开发工程师 / 自动化 AI 执行 Agent  
 > **适用目标硬件**：MKS Base V1.6 (ATmega2560 @ 16MHz) + SCARA 机械臂 (L1=300mm, L2=300mm)  
-> **目标代码库**：`d:/Software/antigravity/Marlin/Marlin/`  
+> **目标代码库**：`c:/my_source/Marlin/Marlin/`  
 > **状态**：待执行实施 (Ready for Execution)
 
 ---
@@ -68,10 +68,10 @@ while (--segments) {
 
 ## 四、具体固件修改清单 (Firmware Implementation)
 
-所有修改均在 `d:/Software/antigravity/Marlin/Marlin/` 工程目录下进行。
+所有修改均在 `c:/my_source/Marlin/Marlin/` 工程目录下进行。
 
 ### 4.1 修改文件 1：`Configuration.h`
-路径：[Configuration.h](file:///d:/Software/antigravity/Marlin/Marlin/Configuration.h)
+路径：[Configuration.h](file:///c:/my_source/Marlin/Marlin/Configuration.h)
 
 #### 修改点 A：切片频率调优（第 1098 行）
 将原本的 200 改为 40：
@@ -103,7 +103,7 @@ while (--segments) {
 ---
 
 ### 4.2 修改文件 2：`src/module/planner.cpp`
-路径：[src/module/planner.cpp](file:///d:/Software/antigravity/Marlin/Marlin/src/module/planner.cpp)
+路径：[src/module/planner.cpp](file:///c:/my_source/Marlin/Marlin/src/module/planner.cpp)
 
 #### 修改点：在 `Planner::buffer_line` 中实现微切片姿态补偿（第 3084 行附近）
 在 `inverse_kinematics(machine)` 求解出 `motion.delta.a`（大臂角）与 `motion.delta.b`（小臂角）之后，拦截 `motion.delta.e` 的赋值：
@@ -137,7 +137,7 @@ while (--segments) {
 
 ## 五、编译与烧录流程 (Build & Flash Instructions)
 
-工作目录位于固件根目录：`d:/Software/antigravity/Marlin/`
+工作目录位于固件根目录：`c:/my_source/Marlin/`
 
 ### 5.1 本地静态编译
 在 PowerShell 中执行：

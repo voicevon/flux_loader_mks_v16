@@ -3,7 +3,7 @@
 ## 1. 重构背景与现状剖析
 
 ### 1.1 现状分析
-当前 [loader_cli.py](file:///d:/Software/antigravity/flux_loader_mks_v16/tools/loader_cli.py) 为单一脚本文件（800+ 行），虽然实现了完整功能，但存在以下面向对象设计缺陷：
+当前 [loader_cli.py](file:///c:/my_source/flux_loader_mks_v16/tools/loader_cli.py) 为单一脚本文件（800+ 行），虽然实现了完整功能，但存在以下面向对象设计缺陷：
 1. **职责高度耦合 (God Objects)**：
    * `MarlinSerialClient` 既承担底层串口读写与超时处理，又承担坐标协议文本解析（`M114` 正则）、运动学关节状态估算、以及设备启动宏发送（`G92`, `M302`）。
    * `LoaderController` 既直接构造底层 G-code 字符串，又控制末端舵机角度映射，还硬编码包含了具体的抓取业务逻辑（`run_pick_and_place_macro`）。
@@ -274,7 +274,7 @@ class LoaderCLIApp:
 为兼顾优雅的模块化设计与老用户习惯，采用如下文件组织结构：
 
 ```
-d:\Software\antigravity\flux_loader_mks_v16\
+c:\my_source\flux_loader_mks_v16\
 ├── loader_core/                   # [新增] 核心面向对象架构包
 │   ├── __init__.py                # 导出主要 API
 │   ├── config.py                  # LoaderConfig 配置类与默认常量

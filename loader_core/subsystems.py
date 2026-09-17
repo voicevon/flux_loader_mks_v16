@@ -3,11 +3,12 @@
 硬件子系统层 (Hardware Subsystems)
 管理末端执行器相关的硬件子系统：Z 轴升降舵机与夹爪舵机。
 
-评审 #6：set_z_height 同时发送 G1 Z + M280 P0 两条指令，
+评审 #6：set_z_height 同时发送 M280 P0 + G92 Z 两条指令，
 保留双重机制的原因：
-  - G1 Z：确保 Marlin 内部坐标系与物理位置同步（防止下次绝对坐标移动跳变）。
-  - M280 P0：直接驱动 PWM 精准定位舵机角度（G1 Z 在 SCARA 固件中
-    有时因 Z 轴规划缓冲导致实际到位偏慢，M280 可作精确补偿）。
+  - M280 P0：直接驱动 PWM 精准定位舵机角度（物理升降由舵机执行，
+    绝不向步进驱动发脉冲）。
+  - G92 Z：纯坐标状态标记，同步 Marlin 内部坐标计数（不驱动任何电机），
+    防止下次绝对坐标移动跳变。
 两条指令均需保留，不可只保留其中一条。
 """
 
@@ -41,8 +42,8 @@ class GripperSubsystem:
         """设置 Z 轴高度 (0 ~ z_max_mm mm)。
 
         双重指令机制（保留原因详见模块文档 [评审 #6]）：
-          1. G1 Z<val>：同步 Marlin 坐标系
-          2. M280 P<id> S<angle>：直接精准驱动 PWM 舵机
+          1. M280 P<id> S<angle>：直接精准驱动 PWM 舵机
+          2. G92 Z<val>：同步 Marlin 坐标系（不驱动电机）
 
         Args:
             z_mm: 目标高度 (mm)，自动限幅到 [z_min_mm, z_max_mm]
@@ -85,7 +86,8 @@ class GripperSubsystem:
 
         Args:
             gripper_id: 1=芦笋头端 (Servo 1), 2=芦笋尾端 (Servo 2)
-            open_state: True=打开(0°), False=闭合(90°)
+            open_state: True=打开 (config.gripper_open_angle, 实测 30°),
+                        False=闭合抓紧 (config.gripper_close_angle, 实测 0°)
         """
         angle = self._cfg.gripper_open_angle if open_state else self._cfg.gripper_close_angle
         state_str = f"打开({self._cfg.gripper_open_angle}°)" if open_state else f"闭合({self._cfg.gripper_close_angle}°)"

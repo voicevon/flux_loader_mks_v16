@@ -299,7 +299,8 @@ class ScaraRobot:
     def jog_joint(self, joint: str, delta_deg: float) -> None:
         """关节独立增量点动（直接发送 G6 绕过逆解算，纯关节空间控制）。
 
-        大臂与小臂分别采用独立设定的高速进给率（大臂600°/s，小臂1500°/s）。
+        大臂与小臂分别采用独立设定的高速进给率（大臂 200°/s，小臂 500°/s，
+        见 LoaderConfig.joint_theta_jog_feedrate / joint_psi_jog_feedrate）。
 
         Args:
             joint:     关节名称，'theta' (大臂) / 'psi' (小臂)（大小写不敏感）

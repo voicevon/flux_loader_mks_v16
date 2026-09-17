@@ -1,7 +1,7 @@
 # SCARA 固件 Segment 级姿态解耦与三轴高频同步规划案 (Roadmap & Technical Spec)
 
 **文档状态**：实施规范已就绪 (Spec Ready, Awaiting Firmware Patch & Flash)  
-**最新执行规范**：详见独立自包含实施文档 [doc/firmware_r_axis_decoupling_spec.md](file:///d:/Software/antigravity/flux_loader_mks_v16/doc/firmware_r_axis_decoupling_spec.md)  
+**最新执行规范**：详见独立自包含实施文档 [doc/firmware_r_axis_decoupling_spec.md](file:///c:/my_source/flux_loader_mks_v16/doc/firmware_r_axis_decoupling_spec.md)  
 **作者**：架构开发组  
 **关联代码**：`Marlin/Marlin/src/module/planner.cpp`, `Marlin/Marlin/src/module/motion.cpp`, `Marlin/Marlin/src/module/scara.cpp`
 
@@ -126,7 +126,7 @@ $$E_{\text{motor\_end}} = R_{\text{world}} - (\theta_{\text{end}} + \psi_{\text{
 
 1. **第一阶段（已完成）**：
    - 上位机支持世界坐标定义及 G6 关节点动姿态补偿。
-   - 编写完成底层独立自包含实施规范 [firmware_r_axis_decoupling_spec.md](file:///d:/Software/antigravity/flux_loader_mks_v16/doc/firmware_r_axis_decoupling_spec.md)。
+   - 编写完成底层独立自包含实施规范 [firmware_r_axis_decoupling_spec.md](file:///c:/my_source/flux_loader_mks_v16/doc/firmware_r_axis_decoupling_spec.md)。
 2. **第二阶段（当前待执行）**：
    - 在固件源码（`Configuration.h`、`planner.cpp`）中应用上述 patch（40Hz 降频 + R 轴解耦）。
    - 使用 PlatformIO 编译新固件并烧录至 MKS Base V1.6。
